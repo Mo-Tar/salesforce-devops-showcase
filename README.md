@@ -1,5 +1,3 @@
-# salesforce-devops-showcase
-
 # Salesforce DevOps Pipeline
 
 A CI/CD pipeline that automates Salesforce metadata deployments using GitHub Actions, Salesforce DX, and PMD static analysis. On every push to `main`, the pipeline runs static analysis, provisions a scratch org, deploys Apex classes, runs the full test suite, and tears the org down — zero manual steps required.
