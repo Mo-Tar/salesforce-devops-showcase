@@ -1,0 +1,68 @@
+name: Salesforce CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  static-analysis:
+    name: PMD Static Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run PMD
+        uses: pmd/pmd-github-action@v2
+        with:
+          version: 'latest'
+          sourcePath: 'force-app/main/default/classes'
+          rulesets: 'pmd-ruleset.xml'
+
+  deploy-to-scratch-org:
+    name: Deploy and Test
+    runs-on: ubuntu-latest
+    needs: static-analysis   # Only runs if PMD passes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Salesforce CLI
+        run: npm install -g @salesforce/cli
+
+      - name: Authenticate Dev Hub
+        run: |
+          echo "${{ secrets.SFDX_AUTH_URL }}" > ./auth-url.txt
+          sf org login sfdx-url \
+            --sfdx-url-file ./auth-url.txt \
+            --set-default-dev-hub \
+            --alias DevHub
+
+      - name: Create Scratch Org
+        run: |
+          sf org create scratch \
+            --definition-file config/project-scratch-def.json \
+            --alias ScratchOrg \
+            --set-default \
+            --duration-days 1
+
+      - name: Deploy Metadata
+        run: |
+          sf project deploy start \
+            --source-dir force-app \
+            --target-org ScratchOrg
+
+      - name: Run Apex Tests
+        run: |
+          sf apex run test \
+            --target-org ScratchOrg \
+            --wait 10 \
+            --result-format human \
+            --code-coverage
+
+      - name: Delete Scratch Org
+        if: always()   # Runs even if previous steps failed
+        run: sf org delete scratch --target-org ScratchOrg --no-prompt
